@@ -4,6 +4,7 @@ set -euxo pipefail
 
 echo "$(date) $RANDOM" >example/example.txt
 ./tools/bazel build --execution_log_binary_file=build1.log example:uses_example_file.txt
+./tools/bazel clean --expunge --async
 echo "$(date) $RANDOM" >example/example.txt
 ./tools/bazel build --execution_log_binary_file=build2.log example:uses_example_file.txt
 
