@@ -1,0 +1,20 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "analyzer_lib",
+    srcs = ["main.go"],
+    importpath = "tools/analyzer",
+    visibility = ["//visibility:public"],
+)
+
+go_binary(
+    name = "analyzer",
+    embed = [":analyzer_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "analyzer_test",
+    srcs = ["main_test.go"],
+    embed = [":analyzer_lib"],
+)

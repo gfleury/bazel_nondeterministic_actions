@@ -1,0 +1,29 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "check_lib",
+    srcs = ["main.go"],
+    importpath = "tools/check",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tools/execlog/lib",
+        "//tools/execlog/proto",
+        "@org_golang_google_protobuf//proto",
+    ],
+)
+
+go_binary(
+    name = "check",
+    embed = [":check_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "check_test",
+    srcs = ["main_test.go"],
+    embed = [":check_lib"],
+    deps = [
+        "//tools/execlog/proto",
+        "@org_golang_google_protobuf//encoding/protodelim",
+    ],
+)

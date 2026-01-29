@@ -1,0 +1,72 @@
+// Copyright 2018 The Bazel Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package tools.protos;
+
+option go_package = "tools/execlog/proto";
+
+message Digest {
+  // Digest of a file's contents using the current FileSystem digest function.
+  string hash = 1;
+
+  // The size in bytes of the original content.
+  int64 size_bytes = 2;
+
+  // The digest function that was used to generate the hash.
+  string hash_function_name = 3;
+}
+
+message File {
+  // Path to the file relative to the execution root.
+  string path = 1;
+
+  // Digest of the file's contents.
+  Digest digest = 2;
+}
+
+// Contents of command environment.
+message EnvironmentVariable {
+  string name = 1;
+  string value = 2;
+}
+
+// Command execution platform.
+message Platform {
+  message Property {
+    string name = 1;
+    string value = 2;
+  }
+  repeated Property properties = 1;
+}
+
+// Details of an executed spawn.
+message SpawnExec {
+  repeated string command_args = 1;
+  repeated EnvironmentVariable environment_variables = 2;
+  Platform platform = 3;
+  repeated File inputs = 4;
+  repeated string listed_outputs = 5;
+  bool remotable = 6;
+  bool cacheable = 7;
+  int64 timeout_millis = 8;
+  string progress_message = 9;
+  string mnemonic = 10;
+  repeated File actual_outputs = 11;
+  string runner = 12;
+  bool remote_cache_hit = 13;
+  string status = 14;
+  int32 exit_code = 15;
+}

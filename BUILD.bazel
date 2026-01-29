@@ -1,0 +1,5 @@
+alias(
+    name = "check",
+    actual = "//tools/check",
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,28 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "lib",
+    srcs = [
+        "formatter.go",
+        "parser.go",
+    ],
+    importpath = "tools/execlog/lib",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tools/execlog/proto",
+        "@org_golang_google_protobuf//encoding/protodelim",
+    ],
+)
+
+go_test(
+    name = "lib_test",
+    srcs = [
+        "formatter_test.go",
+        "parser_test.go",
+    ],
+    embed = [":lib"],
+    deps = [
+        "//tools/execlog/proto",
+        "@org_golang_google_protobuf//encoding/protodelim",
+    ],
+)

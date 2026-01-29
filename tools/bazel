@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#
+# Wrapper script that downloads Bazelisk and runs Bazel through it.
+# Place this at tools/bazel so it can be invoked directly or via
+# the BAZEL_REAL mechanism.
+
+set -euo pipefail
+
+readonly BAZELISK_VERSION="v1.25.0"
+
+readonly TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly CACHE_DIR="${TOOLS_DIR}/.cache"
+
+get_os() {
+  local os
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  case "${os}" in
+    linux)  echo "linux" ;;
+    darwin) echo "darwin" ;;
+    *)
+      echo "Unsupported OS: ${os}" >&2
+      exit 1
+      ;;
+  esac
+}
+
+get_arch() {
+  local arch
+  arch="$(uname -m)"
+  case "${arch}" in
+    x86_64|amd64)   echo "amd64" ;;
+    aarch64|arm64)   echo "arm64" ;;
+    *)
+      echo "Unsupported architecture: ${arch}" >&2
+      exit 1
+      ;;
+  esac
+}
+
+readonly OS="$(get_os)"
+readonly ARCH="$(get_arch)"
+readonly BAZELISK_BIN="${CACHE_DIR}/bazelisk-${BAZELISK_VERSION}-${OS}-${ARCH}"
+readonly BAZELISK_URL="https://github.com/bazelbuild/bazelisk/releases/download/${BAZELISK_VERSION}/bazelisk-${OS}-${ARCH}"
+
+if [[ ! -x "${BAZELISK_BIN}" ]]; then
+  echo "Downloading Bazelisk ${BAZELISK_VERSION}..." >&2
+  mkdir -p "${CACHE_DIR}"
+  curl -fsSL -o "${BAZELISK_BIN}" "${BAZELISK_URL}"
+  chmod +x "${BAZELISK_BIN}"
+fi
+
+exec "${BAZELISK_BIN}" "$@"
