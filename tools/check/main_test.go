@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	pb "tools/execlog/proto"
@@ -43,7 +44,7 @@ func TestIdenticalLogs_Exit0(t *testing.T) {
 	log1 := writeLogs(t, dir, "log1.bin", actions)
 	log2 := writeLogs(t, dir, "log2.bin", actions)
 
-	code := run([]string{log1, log2}, "")
+	code := run([]string{log1, log2}, "", false)
 	if code != exitDeterministic {
 		t.Errorf("identical logs: got exit code %d, want %d", code, exitDeterministic)
 	}
@@ -78,7 +79,7 @@ func TestDifferentActualOutputs_Remotable_Exit1(t *testing.T) {
 	log1 := writeLogs(t, dir, "log1.bin", actions1)
 	log2 := writeLogs(t, dir, "log2.bin", actions2)
 
-	code := run([]string{log1, log2}, "")
+	code := run([]string{log1, log2}, "", false)
 	if code != exitNonDeterministic {
 		t.Errorf("different actual_outputs on remotable action: got exit code %d, want %d", code, exitNonDeterministic)
 	}
@@ -113,7 +114,7 @@ func TestDifferentOutputs_NotRemotableNotCacheable_Exit0(t *testing.T) {
 	log1 := writeLogs(t, dir, "log1.bin", actions1)
 	log2 := writeLogs(t, dir, "log2.bin", actions2)
 
-	code := run([]string{log1, log2}, "")
+	code := run([]string{log1, log2}, "", false)
 	if code != exitDeterministic {
 		t.Errorf("non-remotable/non-cacheable diff: got exit code %d, want %d", code, exitDeterministic)
 	}
@@ -168,7 +169,7 @@ func TestUniqueActions_NotFailure(t *testing.T) {
 	log1 := writeLogs(t, dir, "log1.bin", actions1)
 	log2 := writeLogs(t, dir, "log2.bin", actions2)
 
-	code := run([]string{log1, log2}, "")
+	code := run([]string{log1, log2}, "", false)
 	if code != exitDeterministic {
 		t.Errorf("unique actions (no paired diffs): got exit code %d, want %d", code, exitDeterministic)
 	}
@@ -198,7 +199,6 @@ func TestDiffSections(t *testing.T) {
 
 	diffs := diffSections(a, b)
 
-	// Expect command_args and actual_outputs to differ.
 	wantSections := map[string]bool{
 		"command_args":   true,
 		"actual_outputs": true,
@@ -214,7 +214,6 @@ func TestDiffSections(t *testing.T) {
 		}
 	}
 
-	// Ensure sections that are the same are not reported.
 	notExpected := []string{"inputs", "listed_outputs", "environment_variables", "platform"}
 	for _, ne := range notExpected {
 		if gotSections[ne] {
@@ -224,8 +223,110 @@ func TestDiffSections(t *testing.T) {
 }
 
 func TestWrongArgCount_Exit2(t *testing.T) {
-	code := run([]string{"/nonexistent"}, "")
+	code := run([]string{"/nonexistent"}, "", false)
 	if code != exitUsageError {
 		t.Errorf("wrong arg count: got exit code %d, want %d", code, exitUsageError)
 	}
+}
+
+func TestVerboseDetails(t *testing.T) {
+	a := &pb.SpawnExec{
+		CommandArgs: []string{"/bin/echo", "hello"},
+		EnvironmentVariables: []*pb.EnvironmentVariable{
+			{Name: "PATH", Value: "/usr/bin"},
+			{Name: "HOME", Value: "/home/user"},
+		},
+		Inputs: []*pb.File{
+			{Path: "in/x.txt", Digest: &pb.Digest{Hash: "aaa", SizeBytes: 10}},
+			{Path: "in/y.txt", Digest: &pb.Digest{Hash: "bbb", SizeBytes: 20}},
+		},
+		ActualOutputs: []*pb.File{
+			{Path: "out/a.txt", Digest: &pb.Digest{Hash: "ooo", SizeBytes: 5}},
+		},
+		Platform: &pb.Platform{
+			Properties: []*pb.Platform_Property{
+				{Name: "OSFamily", Value: "Linux"},
+			},
+		},
+	}
+	b := &pb.SpawnExec{
+		CommandArgs: []string{"/bin/echo", "world", "--flag"},
+		EnvironmentVariables: []*pb.EnvironmentVariable{
+			{Name: "PATH", Value: "/usr/local/bin"},
+			{Name: "LANG", Value: "en_US"},
+		},
+		Inputs: []*pb.File{
+			{Path: "in/x.txt", Digest: &pb.Digest{Hash: "aaa2", SizeBytes: 10}},
+			{Path: "in/z.txt", Digest: &pb.Digest{Hash: "ccc", SizeBytes: 30}},
+		},
+		ActualOutputs: []*pb.File{
+			{Path: "out/a.txt", Digest: &pb.Digest{Hash: "ppp", SizeBytes: 5}},
+		},
+		Platform: &pb.Platform{
+			Properties: []*pb.Platform_Property{
+				{Name: "OSFamily", Value: "Darwin"},
+			},
+		},
+	}
+
+	t.Run("command_args", func(t *testing.T) {
+		lines := verboseDetails("command_args", a, b)
+		joined := strings.Join(lines, "\n")
+		if !strings.Contains(joined, `"hello" -> "world"`) {
+			t.Errorf("expected changed arg, got:\n%s", joined)
+		}
+		if !strings.Contains(joined, `"--flag"`) {
+			t.Errorf("expected added arg, got:\n%s", joined)
+		}
+	})
+
+	t.Run("environment_variables", func(t *testing.T) {
+		lines := verboseDetails("environment_variables", a, b)
+		joined := strings.Join(lines, "\n")
+		if !strings.Contains(joined, "PATH") {
+			t.Errorf("expected PATH change, got:\n%s", joined)
+		}
+		if !strings.Contains(joined, "HOME") {
+			t.Errorf("expected HOME removed, got:\n%s", joined)
+		}
+		if !strings.Contains(joined, "LANG") {
+			t.Errorf("expected LANG added, got:\n%s", joined)
+		}
+	})
+
+	t.Run("inputs", func(t *testing.T) {
+		lines := verboseDetails("inputs", a, b)
+		joined := strings.Join(lines, "\n")
+		if !strings.Contains(joined, "in/x.txt") {
+			t.Errorf("expected in/x.txt changed, got:\n%s", joined)
+		}
+		if !strings.Contains(joined, "in/y.txt") {
+			t.Errorf("expected in/y.txt removed, got:\n%s", joined)
+		}
+		if !strings.Contains(joined, "in/z.txt") {
+			t.Errorf("expected in/z.txt added, got:\n%s", joined)
+		}
+	})
+
+	t.Run("actual_outputs", func(t *testing.T) {
+		lines := verboseDetails("actual_outputs", a, b)
+		joined := strings.Join(lines, "\n")
+		if !strings.Contains(joined, "out/a.txt") {
+			t.Errorf("expected out/a.txt changed, got:\n%s", joined)
+		}
+		if !strings.Contains(joined, "ooo") || !strings.Contains(joined, "ppp") {
+			t.Errorf("expected hash values in output, got:\n%s", joined)
+		}
+	})
+
+	t.Run("platform", func(t *testing.T) {
+		lines := verboseDetails("platform", a, b)
+		joined := strings.Join(lines, "\n")
+		if !strings.Contains(joined, "OSFamily") {
+			t.Errorf("expected OSFamily change, got:\n%s", joined)
+		}
+		if !strings.Contains(joined, "Linux") || !strings.Contains(joined, "Darwin") {
+			t.Errorf("expected old/new values, got:\n%s", joined)
+		}
+	})
 }

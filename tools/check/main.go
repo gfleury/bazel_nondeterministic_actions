@@ -31,7 +31,6 @@ const (
 func diffSections(a, b *pb.SpawnExec) []string {
 	var diffs []string
 
-	// command_args
 	if !proto.Equal(
 		&pb.SpawnExec{CommandArgs: a.CommandArgs},
 		&pb.SpawnExec{CommandArgs: b.CommandArgs},
@@ -39,7 +38,6 @@ func diffSections(a, b *pb.SpawnExec) []string {
 		diffs = append(diffs, "command_args")
 	}
 
-	// environment_variables
 	if !proto.Equal(
 		&pb.SpawnExec{EnvironmentVariables: a.EnvironmentVariables},
 		&pb.SpawnExec{EnvironmentVariables: b.EnvironmentVariables},
@@ -47,7 +45,6 @@ func diffSections(a, b *pb.SpawnExec) []string {
 		diffs = append(diffs, "environment_variables")
 	}
 
-	// platform
 	if !proto.Equal(
 		&pb.SpawnExec{Platform: a.Platform},
 		&pb.SpawnExec{Platform: b.Platform},
@@ -55,7 +52,6 @@ func diffSections(a, b *pb.SpawnExec) []string {
 		diffs = append(diffs, "platform")
 	}
 
-	// inputs
 	if !proto.Equal(
 		&pb.SpawnExec{Inputs: a.Inputs},
 		&pb.SpawnExec{Inputs: b.Inputs},
@@ -63,7 +59,6 @@ func diffSections(a, b *pb.SpawnExec) []string {
 		diffs = append(diffs, "inputs")
 	}
 
-	// listed_outputs
 	if !proto.Equal(
 		&pb.SpawnExec{ListedOutputs: a.ListedOutputs},
 		&pb.SpawnExec{ListedOutputs: b.ListedOutputs},
@@ -71,7 +66,6 @@ func diffSections(a, b *pb.SpawnExec) []string {
 		diffs = append(diffs, "listed_outputs")
 	}
 
-	// actual_outputs
 	if !proto.Equal(
 		&pb.SpawnExec{ActualOutputs: a.ActualOutputs},
 		&pb.SpawnExec{ActualOutputs: b.ActualOutputs},
@@ -82,13 +76,172 @@ func diffSections(a, b *pb.SpawnExec) []string {
 	return diffs
 }
 
+// formatDigest returns a short string describing a file's digest.
+func formatDigest(d *pb.Digest) string {
+	if d == nil {
+		return "(no digest)"
+	}
+	return fmt.Sprintf("hash=%s size=%d", d.Hash, d.SizeBytes)
+}
+
+// diffCommandArgs returns detail lines describing how command_args differ.
+func diffCommandArgs(a, b *pb.SpawnExec) []string {
+	var lines []string
+	max := len(a.CommandArgs)
+	if len(b.CommandArgs) > max {
+		max = len(b.CommandArgs)
+	}
+	for i := 0; i < max; i++ {
+		if i >= len(a.CommandArgs) {
+			lines = append(lines, fmt.Sprintf("  added [%d]: %q", i, b.CommandArgs[i]))
+		} else if i >= len(b.CommandArgs) {
+			lines = append(lines, fmt.Sprintf("  removed [%d]: %q", i, a.CommandArgs[i]))
+		} else if a.CommandArgs[i] != b.CommandArgs[i] {
+			lines = append(lines, fmt.Sprintf("  changed [%d]: %q -> %q", i, a.CommandArgs[i], b.CommandArgs[i]))
+		}
+	}
+	return lines
+}
+
+// diffEnvVars returns detail lines describing how environment_variables differ.
+func diffEnvVars(a, b *pb.SpawnExec) []string {
+	aMap := make(map[string]string)
+	for _, e := range a.EnvironmentVariables {
+		aMap[e.Name] = e.Value
+	}
+	bMap := make(map[string]string)
+	for _, e := range b.EnvironmentVariables {
+		bMap[e.Name] = e.Value
+	}
+
+	var lines []string
+	for name, va := range aMap {
+		vb, ok := bMap[name]
+		if !ok {
+			lines = append(lines, fmt.Sprintf("  removed: %s=%q", name, va))
+		} else if va != vb {
+			lines = append(lines, fmt.Sprintf("  changed: %s=%q -> %q", name, va, vb))
+		}
+	}
+	for name, vb := range bMap {
+		if _, ok := aMap[name]; !ok {
+			lines = append(lines, fmt.Sprintf("  added: %s=%q", name, vb))
+		}
+	}
+	return lines
+}
+
+// diffFiles returns detail lines describing how a file list (inputs or actual_outputs) differs.
+func diffFiles(aFiles, bFiles []*pb.File) []string {
+	aMap := make(map[string]*pb.Digest)
+	for _, f := range aFiles {
+		aMap[f.Path] = f.Digest
+	}
+	bMap := make(map[string]*pb.Digest)
+	for _, f := range bFiles {
+		bMap[f.Path] = f.Digest
+	}
+
+	var lines []string
+	for path, da := range aMap {
+		db, ok := bMap[path]
+		if !ok {
+			lines = append(lines, fmt.Sprintf("  removed: %s (%s)", path, formatDigest(da)))
+		} else if !proto.Equal(da, db) {
+			lines = append(lines, fmt.Sprintf("  changed: %s (%s -> %s)", path, formatDigest(da), formatDigest(db)))
+		}
+	}
+	for path, db := range bMap {
+		if _, ok := aMap[path]; !ok {
+			lines = append(lines, fmt.Sprintf("  added: %s (%s)", path, formatDigest(db)))
+		}
+	}
+	return lines
+}
+
+// diffListedOutputs returns detail lines describing how listed_outputs differ.
+func diffListedOutputs(a, b *pb.SpawnExec) []string {
+	aSet := make(map[string]bool)
+	for _, o := range a.ListedOutputs {
+		aSet[o] = true
+	}
+	bSet := make(map[string]bool)
+	for _, o := range b.ListedOutputs {
+		bSet[o] = true
+	}
+
+	var lines []string
+	for o := range aSet {
+		if !bSet[o] {
+			lines = append(lines, fmt.Sprintf("  removed: %s", o))
+		}
+	}
+	for o := range bSet {
+		if !aSet[o] {
+			lines = append(lines, fmt.Sprintf("  added: %s", o))
+		}
+	}
+	return lines
+}
+
+// diffPlatform returns detail lines describing how platform properties differ.
+func diffPlatform(a, b *pb.SpawnExec) []string {
+	aMap := make(map[string]string)
+	if a.Platform != nil {
+		for _, p := range a.Platform.Properties {
+			aMap[p.Name] = p.Value
+		}
+	}
+	bMap := make(map[string]string)
+	if b.Platform != nil {
+		for _, p := range b.Platform.Properties {
+			bMap[p.Name] = p.Value
+		}
+	}
+
+	var lines []string
+	for name, va := range aMap {
+		vb, ok := bMap[name]
+		if !ok {
+			lines = append(lines, fmt.Sprintf("  removed: %s=%q", name, va))
+		} else if va != vb {
+			lines = append(lines, fmt.Sprintf("  changed: %s=%q -> %q", name, va, vb))
+		}
+	}
+	for name, vb := range bMap {
+		if _, ok := aMap[name]; !ok {
+			lines = append(lines, fmt.Sprintf("  added: %s=%q", name, vb))
+		}
+	}
+	return lines
+}
+
+// verboseDetails returns detail lines for a given section name.
+func verboseDetails(section string, a, b *pb.SpawnExec) []string {
+	switch section {
+	case "command_args":
+		return diffCommandArgs(a, b)
+	case "environment_variables":
+		return diffEnvVars(a, b)
+	case "platform":
+		return diffPlatform(a, b)
+	case "inputs":
+		return diffFiles(a.Inputs, b.Inputs)
+	case "listed_outputs":
+		return diffListedOutputs(a, b)
+	case "actual_outputs":
+		return diffFiles(a.ActualOutputs, b.ActualOutputs)
+	}
+	return nil
+}
+
 // actionKey returns the pairing key for a SpawnExec (first listed output).
 func actionKey(exec *pb.SpawnExec) string {
 	return execlog.GetFirstOutput(exec)
 }
 
 // run is the testable entry point. It returns an exit code.
-func run(paths []string, runner string) int {
+func run(paths []string, runner string, verbose bool) int {
 	if len(paths) != 2 {
 		fmt.Fprintf(os.Stderr, "Error: exactly two --log_path values required, got %d\n", len(paths))
 		return exitUsageError
@@ -158,6 +311,7 @@ func run(paths []string, runner string) int {
 		key      string
 		mnemonic string
 		sections []string
+		a, b     *pb.SpawnExec
 	}
 
 	var nonDeterministic []diffResult
@@ -193,6 +347,8 @@ func run(paths []string, runner string) int {
 				key:      key,
 				mnemonic: mnemonic,
 				sections: sections,
+				a:        a,
+				b:        b,
 			})
 		}
 	}
@@ -209,6 +365,17 @@ func run(paths []string, runner string) int {
 		for _, d := range nonDeterministic {
 			fmt.Printf("  %s [%s]\n", d.key, d.mnemonic)
 			fmt.Printf("    differs in: %s\n", strings.Join(d.sections, ", "))
+			if verbose {
+				for _, section := range d.sections {
+					details := verboseDetails(section, d.a, d.b)
+					if len(details) > 0 {
+						fmt.Printf("    %s:\n", section)
+						for _, line := range details {
+							fmt.Printf("      %s\n", line)
+						}
+					}
+				}
+			}
 		}
 		fmt.Println()
 	}
@@ -245,9 +412,11 @@ func run(paths []string, runner string) int {
 func main() {
 	var logPaths stringSlice
 	var runner string
+	var verbose bool
 	flag.Var(&logPaths, "log_path", "Input binary protobuf log file (must be specified exactly twice)")
 	flag.StringVar(&runner, "restrict_to_runner", "", "Filter to specific runner")
+	flag.BoolVar(&verbose, "verbose", false, "Print detailed differences for each non-deterministic action")
 	flag.Parse()
 
-	os.Exit(run(logPaths, runner))
+	os.Exit(run(logPaths, runner, verbose))
 }
