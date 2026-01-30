@@ -37,3 +37,46 @@ genrule(
     outs = ["constant.txt"],
     cmd = "echo 4 > $(OUTS)",
 )
+
+# Examples of non-determinism caused by leaking environment variables.
+# These genrules embed system env vars into their output, so builds on
+# different machines (or with different env) produce different results.
+
+genrule(
+    name = "leaks_user",
+    outs = ["leaks_user.txt"],
+    cmd = "echo user=$$USER > $(OUTS)",
+)
+
+genrule(
+    name = "leaks_hostname",
+    outs = ["leaks_hostname.txt"],
+    cmd = "echo hostname=$$HOSTNAME > $(OUTS)",
+)
+
+genrule(
+    name = "leaks_path",
+    outs = ["leaks_path.txt"],
+    cmd = "echo path=$$PATH > $(OUTS)",
+)
+
+genrule(
+    name = "leaks_multiple_env",
+    outs = ["leaks_multiple_env.txt"],
+    cmd = """
+    echo "user=$$USER" > $(OUTS)
+    echo "home=$$HOME" >> $(OUTS)
+    echo "lang=$$LANG" >> $(OUTS)
+    """,
+)
+
+genrule(
+    name = "leaks_env_in_config",
+    srcs = ["example.txt"],
+    outs = ["leaks_env_in_config.txt"],
+    cmd = """
+    echo "build_user=$$USER" > $(OUTS)
+    echo "build_host=$$HOSTNAME" >> $(OUTS)
+    cat $(SRCS) >> $(OUTS)
+    """,
+)

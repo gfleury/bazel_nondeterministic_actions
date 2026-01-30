@@ -69,4 +69,7 @@ message SpawnExec {
   bool remote_cache_hit = 13;
   string status = 14;
   int32 exit_code = 15;
+
+  // The canonical label of the target this spawn belongs to.
+  string target_label = 18;
 }

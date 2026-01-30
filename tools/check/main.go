@@ -308,10 +308,11 @@ func run(paths []string, runner string, verbose bool) int {
 
 	// Phase 3: Compare paired actions.
 	type diffResult struct {
-		key      string
-		mnemonic string
-		sections []string
-		a, b     *pb.SpawnExec
+		key         string
+		mnemonic    string
+		targetLabel string
+		sections    []string
+		a, b        *pb.SpawnExec
 	}
 
 	var nonDeterministic []diffResult
@@ -344,11 +345,12 @@ func run(paths []string, runner string, verbose bool) int {
 				mnemonic = "(unknown)"
 			}
 			nonDeterministic = append(nonDeterministic, diffResult{
-				key:      key,
-				mnemonic: mnemonic,
-				sections: sections,
-				a:        a,
-				b:        b,
+				key:         key,
+				mnemonic:    mnemonic,
+				targetLabel: a.TargetLabel,
+				sections:    sections,
+				a:           a,
+				b:           b,
 			})
 		}
 	}
@@ -363,7 +365,11 @@ func run(paths []string, runner string, verbose bool) int {
 	if len(nonDeterministic) > 0 {
 		fmt.Printf("Non-deterministic actions found: %d\n\n", len(nonDeterministic))
 		for _, d := range nonDeterministic {
-			fmt.Printf("  %s [%s]\n", d.key, d.mnemonic)
+			if d.targetLabel != "" {
+				fmt.Printf("  %s [%s] (%s)\n", d.key, d.mnemonic, d.targetLabel)
+			} else {
+				fmt.Printf("  %s [%s]\n", d.key, d.mnemonic)
+			}
 			fmt.Printf("    differs in: %s\n", strings.Join(d.sections, ", "))
 			if verbose {
 				for _, section := range d.sections {
