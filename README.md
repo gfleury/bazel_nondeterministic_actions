@@ -46,9 +46,21 @@ If published to BCR, just the `bazel_dep` line is needed:
 bazel_dep(name = "bazel_nondeterministic_actions", version = "0.0.0")
 ```
 
-### Running the check
+### Running the determinism check
 
-Generate two execution logs, then run the check tool:
+The simplest way is to use the bundled `check-determinism` script, which
+builds your targets twice, cleans between runs, and compares the execution logs
+automatically:
+
+```bash
+bazel run @bazel_nondeterministic_actions//:check-determinism -- //your:targets
+```
+
+If no targets are given it defaults to `//...`.
+
+### Running the check tool manually
+
+You can also generate two execution logs yourself and run the check tool directly:
 
 ```bash
 bazel build --execution_log_binary_file=build1.log //your:target
@@ -69,6 +81,14 @@ Log paths must be absolute since `bazel run` executes from a runfiles directory.
 | `--restrict_to_runner` | Only compare actions with this runner (e.g. `linux-sandbox`) |
 
 ## Usage within this repository
+
+Run the full determinism check:
+
+```bash
+./tools/bazel run //:check-determinism -- //your:targets
+```
+
+Or run the check tool directly against existing logs:
 
 ```bash
 ./tools/bazel run //:check -- --log_path "$PWD/build1.log" --log_path "$PWD/build2.log"

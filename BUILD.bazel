@@ -3,3 +3,9 @@ alias(
     actual = "//tools/check",
     visibility = ["//visibility:public"],
 )
+
+alias(
+    name = "check-determinism",
+    actual = "//ci:check-determinism",
+    visibility = ["//visibility:public"],
+)
